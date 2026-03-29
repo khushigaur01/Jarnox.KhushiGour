@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StockIQ — Intelligence Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0e1418;
+    --surface2: #141c22;
+    --border: #1e2d38;
+    --accent: #00e5ff;
+    --accent2: #ff6b35;
+    --green: #00e676;
+    --red: #ff1744;
+    --text: #e8f4f8;
+    --muted: #5a7a8a;
+    --card: #0f1923;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ───────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8,12,16,0.95);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--accent); }
+
+  .header-meta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  /* ── Layout ───────────────────────────── */
+  .layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    min-height: calc(100vh - 61px);
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Sidebar ──────────────────────────── */
+  aside {
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    background: var(--surface);
+  }
+
+  .sidebar-title {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+    padding: 0 20px 12px;
+  }
+
+  .company-list { list-style: none; }
+
+  .company-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .company-item:hover {
+    background: var(--surface2);
+    border-left-color: var(--muted);
+  }
+
+  .company-item.active {
+    background: rgba(0,229,255,0.06);
+    border-left-color: var(--accent);
+  }
+
+  .company-item .sym {
+    font-weight: 700;
+    font-size: 14px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .company-item .return-badge {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .return-badge.pos { background: rgba(0,230,118,0.12); color: var(--green); }
+  .return-badge.neg { background: rgba(255,23,68,0.12); color: var(--red); }
+
+  /* ── Main Panel ───────────────────────── */
+  main {
+    padding: 28px 32px;
+    overflow-y: auto;
+  }
+
+  /* ── Top Row ──────────────────────────── */
+  .top-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.accent { color: var(--accent); }
+
+  /* ── Section Header ───────────────────── */
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .period-tabs {
+    display: flex;
+    gap: 6px;
+  }
+
+  .period-tab {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 5px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .period-tab.active, .period-tab:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,229,255,0.06);
+  }
+
+  /* ── Chart Cards ──────────────────────── */
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  .chart-wrapper {
+    position: relative;
+    height: 280px;
+  }
+
+  /* ── Compare Section ──────────────────── */
+  .compare-controls {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+
+  .compare-controls select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .compare-controls select:focus { border-color: var(--accent); }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 7px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+
+  .corr-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--accent);
+  }
+
+  /* ── Gainers / Losers ─────────────────── */
+  .gl-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .gl-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .gl-card-header {
+    padding: 12px 18px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .gl-card-header.gain { color: var(--green); }
+  .gl-card-header.loss { color: var(--red); }
+
+  .gl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 18px;
+    border-bottom: 1px solid rgba(30,45,56,0.5);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+  }
+
+  .gl-row:last-child { border-bottom: none; }
+
+  .gl-pct.pos { color: var(--green); }
+  .gl-pct.neg { color: var(--red); }
+
+  /* ── Loading / Empty States ───────────── */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    gap: 10px;
+  }
+
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error Banner ─────────────────────── */
+  .error-banner {
+    background: rgba(255,23,68,0.1);
+    border: 1px solid rgba(255,23,68,0.3);
+    color: var(--red);
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 20px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Responsive ───────────────────────── */
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    aside { border-right: none; border-bottom: 1px solid var(--border); }
+    .top-row { grid-template-columns: 1fr 1fr; }
+    .gl-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Stock<span>IQ</span></div>
+  <div class="header-meta" id="clock">— Loading —</div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="sidebar-title">Companies</div>
+    <ul class="company-list" id="companyList">
+      <li class="loading" style="height:80px"><div class="spinner"></div> Fetching...</li>
+    </ul>
+  </aside>
+
+  <main id="mainPanel">
+    <div class="loading" style="height:60vh">
+      <div class="spinner"></div> Select a company to begin
+    </div>
+  </main>
+</div>
+
+<script>
+// ── Config ────────────────────────────────
+const API = 'http://localhost:8000';
+
+// ── State ─────────────────────────────────
+let currentSymbol = null;
+let currentDays = 30;
+let priceChart = null;
+let compareChart = null;
+let gainersLosersData = null;
+
+// ── Clock ─────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Fetch Helpers ─────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`API error ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+// ── Boot ──────────────────────────────────
+async function boot() {
+  try {
+    const [companiesData, gl] = await Promise.all([
+      apiFetch('/companies'),
+      apiFetch('/gainers-losers')
+    ]);
+    gainersLosersData = gl;
+    renderSidebar(companiesData.companies, gl);
+    // Auto-select first
+    if (companiesData.companies.length) selectCompany(companiesData.companies[0]);
+  } catch (e) {
+    document.getElementById('companyList').innerHTML =
+      `<li class="loading" style="color:#ff1744">⚠ Cannot reach API.<br>Start backend first.</li>`;
+    document.getElementById('mainPanel').innerHTML =
+      `<div class="error-banner">⚠ Cannot connect to backend at ${API}.<br>Run: <code>uvicorn main:app --reload --port 8000</code></div>`;
+  }
+}
+
+// ── Sidebar ───────────────────────────────
+function renderSidebar(companies, gl) {
+  const returnMap = {};
+  [...(gl.gainers || []), ...(gl.losers || [])].forEach(item => {
+    returnMap[item.symbol] = item.daily_return_pct;
+  });
+
+  const list = document.getElementById('companyList');
+  list.innerHTML = companies.map(sym => {
+    const ret = returnMap[sym];
+    const badge = ret != null
+      ? `<span class="return-badge ${ret >= 0 ? 'pos' : 'neg'}">${ret >= 0 ? '+' : ''}${ret}%</span>`
+      : '';
+    return `<li class="company-item" data-sym="${sym}" onclick="selectCompany('${sym}')">
+      <span class="sym">${sym}</span>${badge}
+    </li>`;
+  }).join('');
+}
+
+// ── Select Company ────────────────────────
+async function selectCompany(symbol) {
+  currentSymbol = symbol;
+  currentDays = 30;
+
+  // Update sidebar active
+  document.querySelectorAll('.company-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.sym === symbol);
+  });
+
+  renderMain(symbol);
+}
+
+// ── Main Render ───────────────────────────
+function renderMain(symbol) {
+  document.getElementById('mainPanel').innerHTML = `
+    <!-- Stat Cards -->
+    <div class="top-row" id="statCards">
+      ${['52W HIGH','52W LOW','AVG CLOSE','VOLATILITY'].map(l =>
+        `<div class="stat-card"><div class="stat-label">${l}</div>
+         <div class="stat-value" id="stat_${l.replace(/\s/g,'_')}">—</div></div>`
+      ).join('')}
+    </div>
+
+    <!-- Price Chart -->
+    <div class="section-head">
+      <span class="section-title">📈 Closing Price</span>
+      <div class="period-tabs">
+        <button class="period-tab active" onclick="changePeriod(this,30)">30D</button>
+        <button class="period-tab" onclick="changePeriod(this,90)">90D</button>
+        <button class="period-tab" onclick="changePeriod(this,180)">180D</button>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-wrapper" id="priceWrapper"><canvas id="priceChart"></canvas></div>
+    </div>
+
+    <!-- Gainers / Losers -->
+    <div class="section-head"><span class="section-title">🏆 Gainers & Losers</span></div>
+    <div class="gl-grid" id="glGrid">
+      <div class="loading"><div class="spinner"></div></div>
+    </div>
+
+    <!-- Compare -->
+    <div class="section-head" style="margin-top:28px"><span class="section-title">⚖ Compare Stocks</span></div>
+    <div class="chart-card">
+      <div class="compare-controls">
+        <select id="cmp1"></select>
+        <span style="color:var(--muted)">vs</span>
+        <select id="cmp2"></select>
+        <button class="btn" onclick="runCompare()">Compare</button>
+        <span class="corr-badge" id="corrBadge" style="display:none"></span>
+      </div>
+      <div class="chart-wrapper" id="compareWrapper"><canvas id="compareChart"></canvas></div>
+    </div>
+  `;
+
+  loadSummary(symbol);
+  loadPriceChart(symbol, 30);
+  renderGainersLosers();
+  populateCompareSelects(symbol);
+}
+
+// ── Summary ───────────────────────────────
+async function loadSummary(symbol) {
+  try {
+    const d = await apiFetch(`/summary/${symbol}`);
+    setText('stat_52W_HIGH', `₹${d['52_week_high']}`, 'green');
+    setText('stat_52W_LOW',  `₹${d['52_week_low']}`,  'red');
+    setText('stat_AVG_CLOSE',`₹${d.avg_close}`,        'accent');
+    setText('stat_VOLATILITY', d.volatility_score.toFixed(2), '');
+  } catch {}
+}
+
+function setText(id, val, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  if (cls) el.className = `stat-value ${cls}`;
+}
+
+// ── Chart helpers ─────────────────────────
+function chartOptions() {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { labels: { color: '#5a7a8a', font: { family: 'JetBrains Mono', size: 11 } } },
+      tooltip: { backgroundColor: '#0e1418', borderColor: '#1e2d38', borderWidth: 1,
+        titleColor: '#e8f4f8', bodyColor: '#5a7a8a',
+        callbacks: { label: c => ` ₹${c.parsed.y?.toFixed(2)}` } }
+    },
+    scales: {
+      x: { ticks: { color: '#5a7a8a', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 8 }, grid: { color: 'rgba(30,45,56,0.4)' } },
+      y: { ticks: { color: '#5a7a8a', font: { family: 'JetBrains Mono', size: 10 }, callback: v => '₹' + v }, grid: { color: 'rgba(30,45,56,0.4)' } }
+    }
+  };
+}
+
+// ── Price Chart ───────────────────────────
+async function loadPriceChart(symbol, days) {
+  const wrapper = document.getElementById('priceWrapper');
+  if (!wrapper) return;
+
+  wrapper.innerHTML = `<div class="loading"><div class="spinner"></div> Loading chart…</div>`;
+
+  try {
+    const res = await apiFetch(`/data/${symbol}?days=${days}`);
+    const data = res.data;
+
+    wrapper.innerHTML = '<canvas id="priceChart"></canvas>';
+    if (priceChart) { priceChart.destroy(); priceChart = null; }
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    priceChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data.map(d => d.date),
+        datasets: [
+          { label: 'Close', data: data.map(d => d.close), borderColor: '#00e5ff', backgroundColor: 'rgba(0,229,255,0.06)', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: true },
+          { label: '7D MA', data: data.map(d => d.ma_7), borderColor: '#ff6b35', borderWidth: 1.5, pointRadius: 0, tension: 0.3, borderDash: [4,4], fill: false }
+        ]
+      },
+      options: chartOptions()
+    });
+  } catch (e) {
+    console.error('Price chart error:', e);
+    const w = document.getElementById('priceWrapper');
+    if (w) w.innerHTML = `<div class="loading" style="color:#ff1744">⚠ ${e.message}</div>`;
+  }
+}
+
+// ── Period Change ─────────────────────────
+function changePeriod(btn, days) {
+  document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentDays = days;
+  loadPriceChart(currentSymbol, days);
+}
+
+// ── Gainers & Losers ──────────────────────
+function renderGainersLosers() {
+  const gl = gainersLosersData;
+  const grid = document.getElementById('glGrid');
+  if (!gl || !grid) return;
+
+  grid.innerHTML = `
+    <div class="gl-card">
+      <div class="gl-card-header gain">▲ Top Gainers</div>
+      ${gl.gainers.map(g => `
+        <div class="gl-row">
+          <span>${g.symbol}</span>
+          <span>₹${g.close}</span>
+          <span class="gl-pct pos">+${g.daily_return_pct}%</span>
+        </div>`).join('')}
+    </div>
+    <div class="gl-card">
+      <div class="gl-card-header loss">▼ Top Losers</div>
+      ${gl.losers.map(g => `
+        <div class="gl-row">
+          <span>${g.symbol}</span>
+          <span>₹${g.close}</span>
+          <span class="gl-pct neg">${g.daily_return_pct}%</span>
+        </div>`).join('')}
+    </div>
+  `;
+}
+
+// ── Compare ───────────────────────────────
+function populateCompareSelects(current) {
+  const companies = Array.from(document.querySelectorAll('.company-item')).map(el => el.dataset.sym);
+  ['cmp1','cmp2'].forEach((id, i) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = companies.map(c => `<option ${c === (i === 0 ? current : companies[1])}>${c}</option>`).join('');
+  });
+  if (companies.length >= 2) {
+    document.getElementById('cmp2').value = companies.find(c => c !== current) || companies[1];
+  }
+}
+
+async function runCompare() {
+  const s1 = document.getElementById('cmp1').value;
+  const s2 = document.getElementById('cmp2').value;
+  if (s1 === s2) return;
+
+  const badge = document.getElementById('corrBadge');
+  badge.style.display = 'none';
+
+  const cmpWrapper = document.getElementById('compareWrapper');
+  if (cmpWrapper) cmpWrapper.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+
+  try {
+    const data = await apiFetch(`/compare?symbol1=${s1}&symbol2=${s2}&days=${currentDays}`);
+
+    if (cmpWrapper) cmpWrapper.innerHTML = '<canvas id="compareChart"></canvas>';
+    if (compareChart) { compareChart.destroy(); compareChart = null; }
+    const ctx = document.getElementById('compareChart').getContext('2d');
+
+    compareChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: data[s1].dates,
+        datasets: [
+          { label: `${s1} (${data[s1].pct_change >= 0 ? '+' : ''}${data[s1].pct_change}%)`, data: data[s1].closes, borderColor: '#00e5ff', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
+          { label: `${s2} (${data[s2].pct_change >= 0 ? '+' : ''}${data[s2].pct_change}%)`, data: data[s2].closes, borderColor: '#ff6b35', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false }
+        ]
+      },
+      options: chartOptions()
+    });
+
+    if (data.correlation != null) {
+      badge.style.display = 'block';
+      badge.textContent = `Correlation: ${data.correlation}`;
+    }
+  } catch (e) {
+    console.error('Compare error:', e);
+    if (cmpWrapper) cmpWrapper.innerHTML = `<div class="loading" style="color:#ff1744">⚠ ${e.message}</div>`;
+  }
+}
+
+// ── Start ─────────────────────────────────
+boot();
+</script>
+</body>
+</html>
