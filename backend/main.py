@@ -1,17 +1,28 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager          # ← ADDED
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db, engine
 from models import StockPrice, Base
-from fetch_data import COMPANIES
+from fetch_data import COMPANIES, fetch_and_store   # ← fetch_and_store added
 from datetime import date, timedelta
 from typing import Optional
 import numpy as np
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Stock Intelligence API", version="1.0")
+# ── Startup: fetch data when server launches ──────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Server starting — fetching stock data...")
+    try:
+        fetch_and_store()
+    except Exception as e:
+        print(f"⚠ Data fetch warning: {e}")
+    yield
+
+app = FastAPI(title="Stock Intelligence API", version="1.0", lifespan=lifespan)  # ← lifespan added
 
 app.add_middleware(
     CORSMiddleware,
@@ -73,7 +84,6 @@ def get_summary(symbol: str, db: Session = Depends(get_db)):
 
     closes = [r.close for r in rows]
     returns = [r.daily_return for r in rows if r.daily_return is not None]
-    volatilities = [r.volatility for r in rows if r.volatility is not None]
 
     return {
         "symbol": symbol,
@@ -112,7 +122,6 @@ def compare_stocks(symbol1: str, symbol2: str, days: int = 30, db: Session = Dep
             "end_price": round(closes[-1], 2),
         }
 
-    # Correlation
     s1 = symbol1.upper()
     s2 = symbol2.upper()
     min_len = min(len(result[s1]["closes"]), len(result[s2]["closes"]))
@@ -136,10 +145,20 @@ def top_gainers_losers(db: Session = Depends(get_db)):
             .first()
         )
         if row and row.daily_return is not None:
-            result.append({"symbol": symbol, "daily_return_pct": round(row.daily_return * 100, 2), "close": round(row.close, 2)})
+            result.append({
+                "symbol": symbol,
+                "daily_return_pct": round(row.daily_return * 100, 2),
+                "close": round(row.close, 2)
+            })
 
     result.sort(key=lambda x: x["daily_return_pct"], reverse=True)
     return {
         "gainers": result[:3],
         "losers": result[-3:][::-1],
     }
+```
+
+---
+
+## Now Do These 3 Things:
+

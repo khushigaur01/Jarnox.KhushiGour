@@ -1,11 +1,11 @@
 import yfinance as yf
 import pandas as pd
+import time                          # ← ADDED
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
 from models import StockPrice, Base
 
-# List of Indian stocks (NSE symbols on Yahoo Finance)
 COMPANIES = {
     "RELIANCE": "RELIANCE.NS",
     "TCS": "TCS.NS",
@@ -22,18 +22,18 @@ def fetch_and_store():
     db = SessionLocal()
 
     end = datetime.today()
-    start = end - timedelta(days=365)  # 1 year of data
+    start = end - timedelta(days=365)
 
     for symbol, ticker in COMPANIES.items():
         print(f"Fetching {symbol}...")
         try:
             df = yf.download(ticker, start=start, end=end, progress=False)
+            time.sleep(3)            # ← ADDED: wait 3 sec between each stock
 
             if df.empty:
                 print(f"  No data for {symbol}, skipping.")
                 continue
 
-            # Flatten multi-level columns if present
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
 
@@ -43,15 +43,12 @@ def fetch_and_store():
                 "Low": "low", "Close": "close", "Volume": "volume"
             }, inplace=True)
 
-            # Clean: drop rows with any NaN in key columns
             df.dropna(subset=["open", "high", "low", "close"], inplace=True)
 
-            # Calculated metrics
             df["daily_return"] = (df["close"] - df["open"]) / df["open"]
             df["ma_7"] = df["close"].rolling(window=7).mean()
             df["volatility"] = df["close"].rolling(window=7).std()
 
-            # Remove old records for this symbol
             db.query(StockPrice).filter(StockPrice.symbol == symbol).delete()
 
             for _, row in df.iterrows():
